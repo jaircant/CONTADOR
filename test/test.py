@@ -1,40 +1,58 @@
-# SPDX-FileCopyrightText: © 2024 Tiny Tapeout
-# SPDX-License-Identifier: Apache-2.0
-
 import cocotb
-from cocotb.clock import Clock
-from cocotb.triggers import ClockCycles
+from cocotb.triggers import Timer
 
 
 @cocotb.test()
-async def test_project(dut):
-    dut._log.info("Start")
-
-    # Set the clock period to 10 us (100 KHz)
-    clock = Clock(dut.clk, 10, unit="us")
-    cocotb.start_soon(clock.start())
-
-    # Reset
-    dut._log.info("Reset")
-    dut.ena.value = 1
-    dut.ui_in.value = 0
-    dut.uio_in.value = 0
-    dut.rst_n.value = 0
-    await ClockCycles(dut.clk, 10)
+async def test_contador_3bits(dut):
+    dut.ena.value = 1       # Habilita el proyecto
+    dut.clk.value = 0
     dut.rst_n.value = 1
+    dut.ui_in.value = 0     # ui_in[7] = 0: permite contar
+    dut.uio_in.value = 0
 
-    dut._log.info("Test project behavior")
+    async def pulso():
+        dut.clk.value = 1
+        await Timer(10, unit="ns")
+        dut.clk.value = 0
+        await Timer(10, unit="ns")
 
-    # Set the input values you want to test
-    dut.ui_in.value = 20
-    dut.uio_in.value = 30
+    def comprobar(esperado):
+        obtenido = int(dut.uo_out.value)
+        assert obtenido == esperado, (
+            f"Se esperaba {esperado:03b} y se obtuvo {obtenido:03b}"
+        )
 
-    # Wait for one clock cycle to see the output values
-    await ClockCycles(dut.clk, 1)
+    # 1. Activa el reset con el reloj detenido. Debe mostrar 000.
+    await Timer(10, unit="ns")
+    dut.rst_n.value = 0
+    await Timer(10, unit="ns")
+    comprobar(0)
 
-    # The following assersion is just an example of how to check the output values.
-    # Change it to match the actual expected output of your module:
-    assert dut.uo_out.value == 50
+    dut.rst_n.value = 1
+    await Timer(10, unit="ns")
 
-    # Keep testing the module by changing the input values, waiting for
-    # one or more clock cycles, and asserting the expected output values.
+    # 2. Cuenta de 001 a 111, vuelve a 000 y continúa hasta 011.
+    for esperado in [1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3]:
+        await pulso()
+        comprobar(esperado)
+
+    # 3. Activa PAUSA. Tres pulsos deben dejar la cuenta en 011.
+    dut.ui_in.value = 0b10000000
+    await Timer(10, unit="ns")
+    for _ in range(3):
+        await pulso()
+        comprobar(3)
+
+    # 4. Quita PAUSA. La cuenta debe avanzar de 011 a 100.
+    dut.ui_in.value = 0
+    await Timer(10, unit="ns")
+    comprobar(3)
+    await pulso()
+    comprobar(4)
+
+    # 5. Con PAUSA activa, el reset debe borrar la cuenta sin otro pulso.
+    dut.ui_in.value = 0b10000000
+    await Timer(10, unit="ns")
+    dut.rst_n.value = 0
+    await Timer(10, unit="ns")
+    comprobar(0)
