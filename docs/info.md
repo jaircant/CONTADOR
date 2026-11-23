@@ -9,11 +9,11 @@ You can also include images in this folder and reference them in the markdown. E
 
 ## How it works
 
-Explain how your project works
+Contador ascendente de 3 bits con pausa y reset asincrono activo en bajo
 
 ## How to test
 
-Explain how to use your project
+ACTIVANDO ENABLE
 
 ## External hardware
 
